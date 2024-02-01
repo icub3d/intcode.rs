@@ -9,18 +9,20 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 /// The sender end of a channel.
 #[derive(Debug, Clone)]
 pub struct ChannelSender {
-    queue: Arc<Mutex<VecDeque<isize>>>,
+    buffer: Arc<Mutex<VecDeque<isize>>>,
     notifier: Sender<()>,
 }
 
 impl ChannelSender {
-    fn new(queue: Arc<Mutex<VecDeque<isize>>>, notifier: Sender<()>) -> Self {
-        Self { queue, notifier }
+    fn new(buffer: Arc<Mutex<VecDeque<isize>>>, notifier: Sender<()>) -> Self {
+        Self { buffer, notifier }
     }
 
     /// Send a value to the channel.
     pub async fn send(&mut self, value: isize) -> Result<()> {
-        self.queue.lock().unwrap().push_back(value);
+        {
+            self.buffer.lock().unwrap().push_back(value);
+        }
         self.notifier.send(()).await?;
         Ok(())
     }
@@ -28,19 +30,19 @@ impl ChannelSender {
 
 /// The receiver end of a channel.
 pub struct ChannelReceiver {
-    queue: Arc<Mutex<VecDeque<isize>>>,
+    buffer: Arc<Mutex<VecDeque<isize>>>,
     notifier: Receiver<()>,
     block_on_recv: bool,
 }
 
 impl ChannelReceiver {
     fn new(
-        queue: Arc<Mutex<VecDeque<isize>>>,
+        buffer: Arc<Mutex<VecDeque<isize>>>,
         notifier: Receiver<()>,
         block_on_recv: bool,
     ) -> Self {
         Self {
-            queue,
+            buffer,
             notifier,
             block_on_recv,
         }
@@ -53,10 +55,10 @@ impl ChannelReceiver {
             true => match self.notifier.recv().await {
                 Some(_) => {
                     let value = {
-                        let data = self.queue.lock().unwrap();
+                        let data = self.buffer.lock().unwrap();
                         *data.front().unwrap()
                     };
-                    self.queue.lock().unwrap().pop_front();
+                    self.buffer.lock().unwrap().pop_front();
                     Some(value)
                 }
                 None => None,
@@ -64,10 +66,10 @@ impl ChannelReceiver {
             false => match self.notifier.try_recv() {
                 Ok(_) => {
                     let value = {
-                        let data = self.queue.lock().unwrap();
+                        let data = self.buffer.lock().unwrap();
                         *data.front().unwrap()
                     };
-                    self.queue.lock().unwrap().pop_front();
+                    self.buffer.lock().unwrap().pop_front();
                     Some(value)
                 }
                 Err(_) => None,
@@ -94,7 +96,7 @@ impl Channel {
         (Self { buffer }, sender, receiver)
     }
 
-    // Get a copy of this channel's buffer.
+    /// Get a copy of this channel's buffer.
     pub fn buffer(&self) -> Vec<isize> {
         self.buffer.lock().unwrap().iter().copied().collect()
     }
