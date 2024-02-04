@@ -1,8 +1,9 @@
 use std::io::stdout;
+use std::time::Duration;
 
-use crate::app::App;
 use crate::event::Event;
 use crate::renderer::RendererState;
+use crate::{app::App, event::EventHandler};
 
 use anyhow::Result;
 use crossterm::{
@@ -13,7 +14,31 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::Backend, Terminal};
+use ratatui::{
+    backend::{Backend, CrosstermBackend},
+    Terminal,
+};
+
+pub async fn run(app: App) -> Result<()> {
+    // Setup our tui, and state.
+    let backend = CrosstermBackend::new(stdout());
+    let terminal = Terminal::new(backend)?;
+    let mut tui = Tui::new(terminal, app).await;
+    tui.init()?;
+
+    // Start our event handler.
+    let mut events = EventHandler::new(Duration::from_millis(16));
+
+    // Our main loop. We draw and then handle events.
+    while tui.running {
+        tui.draw()?;
+        let event = events.next().await?;
+        tui.handle_event(event).await?;
+    }
+
+    // Cleanup the tui.
+    tui.exit()
+}
 
 /// The tui for the application.
 pub struct Tui<B: Backend> {

@@ -1,36 +1,15 @@
-use intcode::app::App;
-use intcode::event::EventHandler;
 use intcode::ipc::Channel;
 use intcode::process::Process;
-use intcode::tui::Tui;
-
-use std::{io::stdout, time::Duration};
 
 use anyhow::Result;
-use clap::{command, Parser};
-use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc::{self, Sender};
-
-// Create a flag so we can run the tui.
-#[derive(Parser)]
-#[command(author, about, version)]
-struct Cli {
-    #[arg(short, long)]
-    tui: bool,
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let input = include_str!("../../inputs/day07");
 
-    let args = Cli::parse();
-
-    if args.tui {
-        run_tui(input).await
-    } else {
-        part1(input).await?;
-        part2(input).await
-    }
+    part1(input).await?;
+    part2(input).await
 }
 
 async fn part1_run_permutation(
@@ -138,26 +117,4 @@ async fn part2(input: &'static str) -> Result<()> {
     }
     println!("p2: {}", max);
     Ok(())
-}
-
-async fn run_tui(input: &'static str) -> Result<()> {
-    // Setup our app, tui, and state.
-    let app = App::new(input).await?;
-    let backend = CrosstermBackend::new(stdout());
-    let terminal = Terminal::new(backend)?;
-    let mut tui = Tui::new(terminal, app).await;
-    tui.init()?;
-
-    // Start our event handler.
-    let mut events = EventHandler::new(Duration::from_millis(16));
-
-    // Our main loop. We draw and then handle events.
-    while tui.running {
-        tui.draw()?;
-        let event = events.next().await?;
-        tui.handle_event(event).await?;
-    }
-
-    // Cleanup the tui.
-    tui.exit()
 }

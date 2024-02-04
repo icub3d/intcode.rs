@@ -7,6 +7,8 @@ pub enum Parameter {
     Position(usize),
     /// A literal value.
     Immediate(isize),
+    /// A relative pointer to a position in memory.
+    Relative(isize),
 }
 
 impl Display for Parameter {
@@ -14,6 +16,7 @@ impl Display for Parameter {
         match self {
             Parameter::Position(pos) => write!(f, "P[{}]", pos),
             Parameter::Immediate(value) => write!(f, "I[{}]", value),
+            Parameter::Relative(offset) => write!(f, "R[{}]", offset),
         }
     }
 }
@@ -26,6 +29,7 @@ impl Parameter {
         match mode {
             0 => Self::Position(value as usize),
             1 => Self::Immediate(value),
+            2 => Self::Relative(value),
             _ => panic!("Invalid parameter mode"),
         }
     }

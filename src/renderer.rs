@@ -1,21 +1,21 @@
-use std::str::FromStr;
+use std::{collections::VecDeque, str::FromStr};
 
 use crate::{app::App, instruction::Instruction, process};
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{Span, Text},
+    text::{Line, Span},
     widgets::{
-        block::Title, Block, BorderType, Borders, Cell, List, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Table, TableState, Tabs,
+        block::Title, Block, BorderType, Borders, Cell, List, Paragraph, Row, Table, TableState,
+        Tabs, Wrap,
     },
     Frame,
 };
 
 /// The colors palette for the monokai theme.
 #[allow(dead_code)]
-enum Monokai {
+pub enum Monokai {
     DarkBlack,
     LightBlack,
     Background,
@@ -65,7 +65,6 @@ pub struct RendererState {
 
     memory_rows: Vec<usize>,
     table_states: Vec<TableState>,
-    scroll_states: Vec<ScrollbarState>,
 }
 
 impl RendererState {
@@ -77,23 +76,17 @@ impl RendererState {
             .iter()
             .map(|state| state.len() / 8)
             .collect::<Vec<_>>();
-        let scroll_states = memory_rows
-            .iter()
-            .map(|i| ScrollbarState::new(*i))
-            .collect::<Vec<_>>();
         let table_states = vec![TableState::default(); total_processes];
         Self {
             active_process: 0,
             total_processes,
             memory_rows,
             table_states,
-            scroll_states,
         }
     }
 
     /// Update the scroll and table states to scroll them "up".
     pub fn scroll_up(&mut self) {
-        self.scroll_states[self.active_process].prev();
         let table_state = &mut self.table_states[self.active_process];
         if table_state.offset() > 0 {
             table_state.select(Some(table_state.offset() - 1));
@@ -103,7 +96,6 @@ impl RendererState {
 
     /// Update the scroll and table states to scroll them "down".
     pub fn scroll_down(&mut self) {
-        self.scroll_states[self.active_process].next();
         let table_state = &mut self.table_states[self.active_process];
         if table_state.offset() < self.memory_rows[self.active_process] - 1 {
             table_state.select(Some(table_state.offset() + 1));
@@ -134,7 +126,7 @@ impl RendererState {
 
         let sidebar = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(3), Constraint::Max(8), Constraint::Max(10)].as_ref())
+            .constraints([Constraint::Min(9), Constraint::Max(7), Constraint::Max(10)].as_ref())
             .split(cols[1]);
 
         // Get all the state information we need.
@@ -148,7 +140,6 @@ impl RendererState {
             cols[0],
             &process_states[self.active_process],
             &mut self.table_states[self.active_process],
-            &mut self.scroll_states[self.active_process],
         );
         Self::draw_process_state(frame, sidebar[0], &process_states[self.active_process]);
         Self::draw_channels(frame, sidebar[1], &buffers, self.active_process);
@@ -214,7 +205,6 @@ impl RendererState {
         chunk: Rect,
         process_state: &process::State,
         table_state: &mut TableState,
-        scroll_state: &mut ScrollbarState,
     ) {
         let block = Block::default()
             .title(Title::from("Memory").alignment(Alignment::Center))
@@ -227,36 +217,73 @@ impl RendererState {
                     .bg(Monokai::Background.into()),
             );
 
-        let (instruction, positions) = match process_state.next_instruction() {
-            Some((instruction, _)) => (instruction, instruction.position_parameters()),
-            None => (Instruction::Halt, Vec::new()),
+        let (instruction, positions, relatives) = match process_state.next_instruction() {
+            Some((instruction, _)) => (
+                instruction,
+                instruction.position_parameters(),
+                instruction.relative_parameters(process_state.relative_base),
+            ),
+            None => (Instruction::Halt, Vec::new(), Vec::new()),
         };
 
+        // A helper function to draw a chunk of memory and create a row for the table.
         let mut params_left = 0;
+        let mut draw_chunk = |start: usize, chunk: &[isize]| {
+            let mut row = vec![Cell::from(format!("{:08}", start))
+                .style(Style::default().bg(Monokai::DarkerGrey.into()))];
+            for (j, v) in chunk.iter().enumerate() {
+                let mut style = Style::default().bg(Monokai::Background.into());
+                if process_state.instruction_pointer == start + j {
+                    style = style.bg(Monokai::Green.into());
+                    params_left = instruction.parameter_count();
+                } else if params_left > 0 {
+                    style = style.bg(Monokai::Red.into());
+                    params_left -= 1;
+                } else if positions.contains(&(start + j)) || relatives.contains(&(start + j)) {
+                    style = style.bg(Monokai::Blue.into());
+                }
+                row.push(Cell::from(format!("{}", v)).style(style));
+            }
+            Row::new(row)
+        };
 
-        let chunks: Vec<_> = process_state
+        let mut chunks: Vec<_> = process_state
             .memory
             .chunks(8)
             .enumerate()
-            .map(|(i, chunk)| {
-                let mut row = vec![Cell::from(format!("{:04}", i * 8))
-                    .style(Style::default().bg(Monokai::DarkerGrey.into()))];
-                for (j, v) in chunk.iter().enumerate() {
-                    let mut style = Style::default().bg(Monokai::Background.into());
-                    if process_state.instruction_pointer == i * 8 + j {
-                        style = style.bg(Monokai::Green.into());
-                        params_left = instruction.parameter_count();
-                    } else if params_left > 0 {
-                        style = style.bg(Monokai::Red.into());
-                        params_left -= 1;
-                    } else if positions.contains(&(i * 8 + j)) {
-                        style = style.bg(Monokai::Blue.into());
-                    }
-                    row.push(Cell::from(format!("{}", v)).style(style));
-                }
-                Row::new(row)
-            })
+            .map(|(i, chunk)| draw_chunk(i * 8, chunk))
             .collect();
+
+        // Get the additional memory groups by sorting them and finding the head of each group of
+        // 8.
+        let mut keys = process_state
+            .additional_memory
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        keys.sort_unstable();
+        let mut keys = keys.into_iter().collect::<VecDeque<_>>();
+        let mut key_groups = vec![];
+        while let Some(head) = keys.pop_front() {
+            let mut count = 1;
+            while !keys.is_empty() && count < 8 {
+                let next = keys.front().unwrap();
+                if *next < head + 8 {
+                    keys.pop_front();
+                    count += 1;
+                } else {
+                    break;
+                }
+            }
+            key_groups.push(head);
+        }
+
+        // Now we can add the additional memory groups to the chunks.
+        for key in key_groups {
+            let memory = (key..key + 8).map(|i| process_state[i]).collect::<Vec<_>>();
+            chunks.push(draw_chunk(key, &memory));
+        }
+
         let widths = [Constraint::Length(10); 9];
         let table = Table::new(chunks, widths)
             .block(block)
@@ -277,18 +304,6 @@ impl RendererState {
             .column_spacing(0);
 
         frame.render_stateful_widget(table, chunk, table_state);
-
-        frame.render_stateful_widget(
-            Scrollbar::default()
-                .orientation(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(None)
-                .end_symbol(None),
-            chunk.inner(&ratatui::layout::Margin {
-                horizontal: 1,
-                vertical: 1,
-            }),
-            scroll_state,
-        );
     }
 
     fn draw_process_state(frame: &mut Frame<'_>, chunk: Rect, process_state: &process::State) {
@@ -309,16 +324,21 @@ impl RendererState {
         };
 
         let states = vec![
-            format!("IP:          {:?}", process_state.instruction_pointer),
-            format!("Halted:      {:?}", process_state.halted),
-            format!("Last Input:  {:?}", process_state.last_input),
-            format!("Last Output: {:?}", process_state.last_output),
+            format!("HLT: {:?}", process_state.halted),
+            format!("IP:  {:?}", process_state.instruction_pointer),
+            format!("RB:  {:?}", process_state.relative_base),
+            format!(
+                "IO:  [{:?}, {:?}]",
+                process_state.last_input, process_state.last_output
+            ),
             format!(""),
             format!("{}", instruction),
         ];
 
-        let items = states.iter().map(Text::raw);
-        let list = List::new(items).block(state_block);
+        let items: Vec<_> = states.iter().map(Line::raw).collect();
+        let list = Paragraph::new(items)
+            .block(state_block)
+            .wrap(Wrap { trim: true });
         frame.render_widget(list, chunk);
     }
 

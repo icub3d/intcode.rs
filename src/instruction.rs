@@ -23,6 +23,8 @@ pub enum Instruction {
     /// Store 1 in the third parameter if the first parameter is equal to the second parameter,
     /// otherwise store 0.
     Equals(Parameter, Parameter, Parameter),
+    /// Adjust the relative base.
+    AdjustRelativeBaseOffset(Parameter),
     /// Halt the program.
     Halt,
 }
@@ -41,8 +43,57 @@ impl Instruction {
             Instruction::JumpIfFalse(_, _) => 2,
             Instruction::LessThan(_, _, _) => 3,
             Instruction::Equals(_, _, _) => 3,
+            Instruction::AdjustRelativeBaseOffset(_) => 1,
             Instruction::Halt => 0,
         }
+    }
+
+    /// Get the parameters in relative mode for a given instruction. This will be used by the tui
+    /// to highlight the memory locations that are being read from or written to.
+    pub fn relative_parameters(&self, base: isize) -> Vec<usize> {
+        let mut relatives = Vec::new();
+        macro_rules! add_relatives {
+            ($param:ident) => {
+                if let Parameter::Relative(offset) = $param {
+                    relatives.push((base + *offset) as usize);
+                }
+            };
+            ($param:ident, $($params:ident),+) => {
+                add_relatives! { $param }
+                add_relatives! { $($params),+ }
+            };
+        }
+        match self {
+            Instruction::Add(left, right, dest) => {
+                add_relatives! { left, right, dest }
+            }
+            Instruction::Multiply(left, right, dest) => {
+                add_relatives! { left, right, dest }
+            }
+            Instruction::Input(dest) => {
+                add_relatives! { dest }
+            }
+            Instruction::Output(value) => {
+                add_relatives! { value }
+            }
+            Instruction::JumpIfTrue(value, dest) => {
+                add_relatives! { value, dest }
+            }
+            Instruction::JumpIfFalse(value, dest) => {
+                add_relatives! { value, dest }
+            }
+            Instruction::LessThan(left, right, dest) => {
+                add_relatives! { left, right, dest }
+            }
+            Instruction::Equals(left, right, dest) => {
+                add_relatives! { left, right, dest }
+            }
+            Instruction::AdjustRelativeBaseOffset(value) => {
+                add_relatives! { value }
+            }
+            Instruction::Halt => {}
+        }
+        relatives
     }
 
     /// Get the parameters in position mode for a given instruction. This will be used by the tui
@@ -85,6 +136,9 @@ impl Instruction {
             Instruction::Equals(left, right, dest) => {
                 add_positions! { left, right, dest }
             }
+            Instruction::AdjustRelativeBaseOffset(value) => {
+                add_positions! { value }
+            }
             Instruction::Halt => {}
         }
         positions
@@ -110,6 +164,7 @@ impl Display for Instruction {
             Instruction::Equals(left, right, dest) => {
                 write!(f, "EQL {} == {} -> {}", left, right, dest)
             }
+            Instruction::AdjustRelativeBaseOffset(value) => write!(f, "ARO {}", value),
             Instruction::Halt => write!(f, "HLT"),
         }
     }
