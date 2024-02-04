@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::instruction::Instruction;
 use crate::ipc::{ChannelReceiver, ChannelSender};
 use crate::parameter::Parameter;
@@ -9,8 +11,12 @@ use anyhow::Result;
 pub struct State {
     /// The memory of the computer.
     pub memory: Vec<isize>,
+    /// Any additional memory that the computer can use.
+    pub additional_memory: HashMap<usize, isize>,
     /// The current instruction pointer.
     pub instruction_pointer: usize,
+    /// The current relative base.
+    pub relative_base: isize,
     /// The last output value sent to the output channel.
     pub last_output: Option<isize>,
     /// The last input value received from the input channel.
@@ -23,13 +29,21 @@ impl std::ops::Index<usize> for State {
     type Output = isize;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.memory[index]
+        if index < self.memory.len() {
+            &self.memory[index]
+        } else {
+            self.additional_memory.get(&index).unwrap_or(&0)
+        }
     }
 }
 
 impl std::ops::IndexMut<usize> for State {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.memory[index]
+        if index < self.memory.len() {
+            &mut self.memory[index]
+        } else {
+            self.additional_memory.entry(index).or_insert(0)
+        }
     }
 }
 
@@ -37,7 +51,9 @@ impl State {
     fn new(memory: Vec<isize>) -> Self {
         Self {
             memory,
+            additional_memory: HashMap::new(),
             instruction_pointer: 0,
+            relative_base: 0,
             last_output: None,
             last_input: None,
             halted: false,
@@ -46,12 +62,12 @@ impl State {
 
     /// Check if the memory is empty.
     pub fn is_empty(&self) -> bool {
-        self.memory.is_empty()
+        self.memory.is_empty() && self.additional_memory.is_empty()
     }
 
     /// Get the length of the memory.
     pub fn len(&self) -> usize {
-        self.memory.len()
+        self.memory.len() + self.additional_memory.len()
     }
 
     /// Get the next instruction and the size of the instruction. If there are no more instructions
@@ -102,6 +118,7 @@ impl State {
             6 => param!(Instruction::JumpIfFalse, 2),
             7 => param!(Instruction::LessThan, 3),
             8 => param!(Instruction::Equals, 3),
+            9 => param!(Instruction::AdjustRelativeBaseOffset, 1),
             99 => Instruction::Halt,
             _ => panic!("invalid opcode"),
         };
@@ -186,12 +203,14 @@ impl Process {
             (write $dest:ident) => {
                 let $dest = match $dest {
                    Parameter::Position(pos) => pos,
+                   Parameter::Relative(offset) => (self.state.relative_base + offset) as usize,
                    Parameter::Immediate(_) => panic!("invalid write parameter"),
                 };
             };
             ($param:ident) => {
                 let $param = match $param {
                     Parameter::Position(pos) => self.state[pos],
+                    Parameter::Relative(offset) => self.state[(self.state.relative_base + offset) as usize],
                     Parameter::Immediate(value) => value,
                 };
             };
@@ -260,6 +279,10 @@ impl Process {
                     true => 1,
                     false => 0,
                 }
+            }
+            Instruction::AdjustRelativeBaseOffset(value) => {
+                eval! { value };
+                self.state.relative_base += value;
             }
             Instruction::Halt => {
                 self.state.halted = true;
