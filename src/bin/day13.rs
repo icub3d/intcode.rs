@@ -127,7 +127,8 @@ async fn part2(replay: Option<String>) -> Result<()> {
             }
 
             // Force a redraw occasionally.
-            _ = tokio::time::sleep(Duration::from_millis(16)) => {}
+            _ = tokio::time::sleep(Duration::from_millis(16)) => {
+            }
         }
     }
 
@@ -320,7 +321,7 @@ mod output_event_emitter {
     enum State {
         X,
         Y,
-        TileId,
+        Tile,
     }
 
     // The output event emitter.
@@ -350,10 +351,10 @@ mod output_event_emitter {
                 }
                 State::Y => {
                     self.y = value;
-                    self.state = State::TileId;
+                    self.state = State::Tile;
                     None
                 }
-                State::TileId => {
+                State::Tile => {
                     self.state = State::X;
                     if self.x == -1 && self.y == 0 {
                         self.state = State::X;
@@ -454,11 +455,11 @@ fn ui(app: &AppState, f: &mut Frame) {
     ))
     .block(status_block)
     .alignment(Alignment::Left);
-
     f.render_widget(status, chunks[2]);
 
+    // We are going to draw the game grid, but we want it centered in the screen. We are going to
+    // make a new layout within the main part of the screen and put the game in the middle.
     let left = (chunks[1].width - 46) / 2;
-
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -468,6 +469,7 @@ fn ui(app: &AppState, f: &mut Frame) {
         ])
         .split(chunks[1]);
 
+    // Draw the game grid.
     let block = Block::default()
         .title(Title::from("BLOCK BREAKER").alignment(Alignment::Center))
         .borders(Borders::ALL)

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::instruction::Instruction;
 use crate::ipc::{ChannelReceiver, ChannelSender};
@@ -7,12 +7,12 @@ use crate::parameter::Parameter;
 use anyhow::Result;
 
 /// The state of the Intcode computer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct State {
     /// The memory of the computer.
     pub memory: Vec<isize>,
     /// Any additional memory that the computer can use.
-    pub additional_memory: HashMap<usize, isize>,
+    pub additional_memory: BTreeMap<usize, isize>,
     /// The current instruction pointer.
     pub instruction_pointer: usize,
     /// The current relative base.
@@ -48,10 +48,15 @@ impl std::ops::IndexMut<usize> for State {
 }
 
 impl State {
-    fn new(memory: Vec<isize>) -> Self {
+    pub fn new(program: &str) -> Self {
+        let memory = program
+            .trim()
+            .split(',')
+            .map(|s| s.parse::<isize>().unwrap())
+            .collect::<Vec<_>>();
         Self {
             memory,
-            additional_memory: HashMap::new(),
+            additional_memory: BTreeMap::new(),
             instruction_pointer: 0,
             relative_base: 0,
             last_output: None,
@@ -143,13 +148,21 @@ impl Process {
         channel_sender: ChannelSender,
     ) -> Self {
         Self {
-            state: State::new(
-                program
-                    .trim()
-                    .split(',')
-                    .map(|s| s.parse::<isize>().unwrap())
-                    .collect::<Vec<_>>(),
-            ),
+            state: State::new(program),
+            channel_receiver,
+            channel_sender,
+        }
+    }
+
+    /// Create a new process with the given state. The receiver will act as the input and the sender
+    /// will act as the output.
+    pub fn with_state(
+        state: State,
+        channel_receiver: ChannelReceiver,
+        channel_sender: ChannelSender,
+    ) -> Self {
+        Self {
+            state,
             channel_receiver,
             channel_sender,
         }
@@ -179,17 +192,40 @@ impl Process {
         Ok(())
     }
 
-    // Run a single step of the process. If the process successfully ran the instruction, then the
-    // instruction pointer will be incremented.
-    pub async fn step(&mut self) -> Result<()> {
+    /// Run the process until the given function returns `true` or the process halts. The function
+    /// is checked before the instruction is run.
+    pub async fn run_until(
+        &mut self,
+        mut f: impl FnMut(&State, &Instruction) -> bool,
+    ) -> Result<()> {
+        while !self.state().halted {
+            if let Some((instruction, instruction_size)) = self.state.next_instruction() {
+                if f(&self.state, &instruction) {
+                    break;
+                }
+                match self.evaluate_instruction(instruction).await {
+                    Ok(true) => self.state.instruction_pointer += instruction_size,
+                    Ok(false) => (),
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Run a single step of the process. If the process successfully ran the instruction, then the
+    /// instruction pointer will be incremented.
+    pub async fn step(&mut self) -> Result<Option<Instruction>> {
         if let Some((instruction, instruction_size)) = self.state.next_instruction() {
             match self.evaluate_instruction(instruction).await {
                 Ok(true) => self.state.instruction_pointer += instruction_size,
                 Ok(false) => (),
                 Err(e) => return Err(e),
             }
+            Ok(Some(instruction))
+        } else {
+            Ok(None)
         }
-        Ok(())
     }
 
     async fn evaluate_instruction(&mut self, instruction: Instruction) -> Result<bool> {
