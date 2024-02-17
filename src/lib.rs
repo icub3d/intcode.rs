@@ -1,5 +1,6 @@
 /// An implementation of the Intcode computer from Advent of Code 2019.
 pub mod app;
+pub mod breakpoint;
 pub mod event;
 pub mod instruction;
 pub mod ipc;

@@ -1,12 +1,13 @@
+use intcode::app::Notification;
 use intcode::ipc::Channel;
-use intcode::process::Process;
+use intcode::process::{Process, State};
 use intcode::{app::App, tui};
 
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use clap::{command, Parser, ValueEnum};
-use tokio::sync::mpsc::{self};
+use tokio::sync::mpsc::{self, Receiver};
 
 #[derive(Clone, Copy, Default, ValueEnum)]
 #[clap(rename_all = "snake_case")]
@@ -39,6 +40,34 @@ async fn main() -> Result<()> {
     tui::run(app).await
 }
 
+async fn main_process(
+    mut notifier: Receiver<Notification>,
+    mut process: Process,
+    state: Arc<Mutex<State>>,
+) {
+    tokio::spawn(async move {
+        while let Some(notification) = notifier.recv().await {
+            if process.state().halted {
+                break;
+            }
+            match notification {
+                Notification::Step => {
+                    process.step().await.unwrap();
+                    *state.lock().unwrap() = process.state();
+                }
+                Notification::StepUntil(breakpoints) => {
+                    process
+                        .run_until(|state, instruction| breakpoints.evaluate(state, instruction))
+                        .await
+                        .unwrap();
+                    *state.lock().unwrap() = process.state();
+                }
+            }
+            *state.lock().unwrap() = process.state();
+        }
+    });
+}
+
 async fn day2() -> Result<App> {
     let input = include_str!("../../inputs/day02");
 
@@ -48,7 +77,7 @@ async fn day2() -> Result<App> {
 
     let (_, sender, receiver) = Channel::new(true);
 
-    let (notifier, mut notifier_receiver) = mpsc::channel::<()>(32);
+    let (notifier, notifier_receiver) = mpsc::channel::<Notification>(32);
     notifiers.push(notifier);
 
     let mut process = Process::new(input, receiver, sender.clone());
@@ -58,15 +87,7 @@ async fn day2() -> Result<App> {
     let state = Arc::new(Mutex::new(process.state()));
     states.push(state.clone());
 
-    tokio::spawn(async move {
-        while notifier_receiver.recv().await.is_some() {
-            if process.state().halted {
-                break;
-            }
-            process.step().await.unwrap();
-            *state.lock().unwrap() = process.state();
-        }
-    });
+    main_process(notifier_receiver, process, state).await;
 
     Ok(App::new(channels, states, notifiers))
 }
@@ -81,24 +102,16 @@ async fn day5() -> Result<App> {
     let (o, output_sender, _) = Channel::new(true);
     let channels = vec![i, o];
 
-    let (notifier, mut notifier_receiver) = mpsc::channel::<()>(32);
+    let (notifier, notifier_receiver) = mpsc::channel::<Notification>(32);
     notifiers.push(notifier);
 
-    let mut process = Process::new(input, input_receiver, output_sender);
+    let process = Process::new(input, input_receiver, output_sender);
     input_sender.send(5).await?;
 
     let state = Arc::new(Mutex::new(process.state()));
     states.push(state.clone());
 
-    tokio::spawn(async move {
-        while notifier_receiver.recv().await.is_some() {
-            if process.state().halted {
-                break;
-            }
-            process.step().await.unwrap();
-            *state.lock().unwrap() = process.state();
-        }
-    });
+    main_process(notifier_receiver, process, state).await;
 
     Ok(App::new(channels, states, notifiers))
 }
@@ -124,22 +137,15 @@ async fn day7() -> Result<App> {
             channels.push(channel);
         }
 
-        let mut process = Process::new(input, receiver, new_sender.clone());
+        let process = Process::new(input, receiver, new_sender.clone());
         let state = Arc::new(Mutex::new(process.state()));
         states.push(state.clone());
 
-        let (notifier, mut notifier_receiver) = mpsc::channel::<()>(32);
+        let (notifier, notifier_receiver) = mpsc::channel::<Notification>(32);
         notifiers.push(notifier);
 
-        tokio::spawn(async move {
-            while notifier_receiver.recv().await.is_some() {
-                if process.state().halted {
-                    break;
-                }
-                process.step().await.unwrap();
-                *state.lock().unwrap() = process.state();
-            }
-        });
+        main_process(notifier_receiver, process, state).await;
+
         (sender, receiver) = (new_sender, new_receiver);
     }
 
@@ -154,22 +160,14 @@ async fn day9() -> Result<App> {
     tx.send(2).await.unwrap();
     let channels = vec![i, o];
 
-    let mut process = Process::new(input, rx, tx2);
+    let process = Process::new(input, rx, tx2);
     let state = Arc::new(Mutex::new(process.state()));
     let states = vec![state.clone()];
 
-    let (notifier, mut notifier_receiver) = mpsc::channel::<()>(32);
+    let (notifier, notifier_receiver) = mpsc::channel::<Notification>(32);
     let notifiers = vec![notifier];
 
-    tokio::spawn(async move {
-        while notifier_receiver.recv().await.is_some() {
-            if process.state().halted {
-                break;
-            }
-            process.step().await.unwrap();
-            *state.lock().unwrap() = process.state();
-        }
-    });
+    main_process(notifier_receiver, process, state).await;
 
     Ok(App::new(channels, states, notifiers))
 }

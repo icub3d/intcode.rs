@@ -1,8 +1,10 @@
 use std::io::stdout;
 use std::time::Duration;
 
+use crate::breakpoint::Breakpoint;
 use crate::event::Event;
-use crate::renderer::RendererState;
+use crate::instruction::Instruction;
+use crate::renderer::{RendererState, WindowState};
 use crate::{app::App, event::EventHandler};
 
 use anyhow::Result;
@@ -119,18 +121,111 @@ impl<B: Backend> Tui<B> {
     }
 
     async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Char('s') => return self.app.step(self.renderer_state.active_process).await,
-            KeyCode::Char('q') => {
+        match (self.renderer_state.window_state, key.code) {
+            // Main window
+            (WindowState::Main, KeyCode::Char('s')) => {
+                return self.app.step(self.renderer_state.active_process).await
+            }
+            (WindowState::Main, KeyCode::Char('c')) => {
+                return self
+                    .app
+                    .step_until(
+                        self.renderer_state.active_process,
+                        self.renderer_state.breakpoints.clone(),
+                    )
+                    .await
+            }
+            (WindowState::Main, KeyCode::Char('q')) | (WindowState::Main, KeyCode::Esc) => {
                 self.running = false;
             }
-            KeyCode::Char(c) => {
+            (WindowState::Main, KeyCode::Char('b')) => {
+                self.renderer_state.window_state = WindowState::BreakpointType;
+            }
+            (WindowState::Main, KeyCode::Char('B')) => {
+                self.renderer_state.window_state = WindowState::BreakpointList;
+            }
+            (WindowState::Main, KeyCode::Char(c)) => {
                 if let Some(i) = c.to_digit(10) {
                     let i = i as usize;
                     if i < self.renderer_state.total_processes {
                         self.renderer_state.active_process = i;
                     }
                 }
+            }
+            (WindowState::Main, KeyCode::Up) => {
+                self.renderer_state.scroll_up();
+            }
+            (WindowState::Main, KeyCode::Down) => {
+                self.renderer_state.scroll_down();
+            }
+
+            // Breakpoint list window
+            (WindowState::BreakpointList, KeyCode::Char('q'))
+            | (WindowState::BreakpointList, KeyCode::Esc) => {
+                self.renderer_state.window_state = WindowState::Main;
+            }
+
+            // Breakpoint type window
+            (WindowState::BreakpointType, KeyCode::Char('q'))
+            | (WindowState::BreakpointType, KeyCode::Esc) => {
+                self.renderer_state.window_state = WindowState::Main;
+            }
+            (WindowState::BreakpointType, KeyCode::Char('m')) => {
+                self.renderer_state.window_state = WindowState::BreakpointMemory;
+            }
+            (WindowState::BreakpointType, KeyCode::Char('i')) => {
+                self.renderer_state.window_state = WindowState::BreakpointInstruction;
+            }
+
+            // Breakpoint memory window
+            (WindowState::BreakpointMemory, KeyCode::Char('q'))
+            | (WindowState::BreakpointMemory, KeyCode::Esc) => {
+                self.renderer_state.window_state = WindowState::Main;
+            }
+            (WindowState::BreakpointMemory, KeyCode::Char(c)) => {
+                if let Some(i) = c.to_digit(10) {
+                    self.renderer_state.chosen_memory_location *= 10;
+                    self.renderer_state.chosen_memory_location += i as usize;
+                }
+            }
+            (WindowState::BreakpointMemory, KeyCode::Backspace) => {
+                self.renderer_state.chosen_memory_location /= 10;
+            }
+            (WindowState::BreakpointMemory, KeyCode::Enter) => {
+                self.renderer_state
+                    .breakpoints
+                    .add(Breakpoint::MemoryLocation(
+                        self.renderer_state.chosen_memory_location,
+                    ));
+                self.renderer_state.chosen_memory_location = 0;
+                self.renderer_state.window_state = WindowState::Main;
+            }
+
+            // Breakpoint instruction window
+            (WindowState::BreakpointInstruction, KeyCode::Char('q'))
+            | (WindowState::BreakpointInstruction, KeyCode::Esc) => {
+                self.renderer_state.window_state = WindowState::Main;
+            }
+            (WindowState::BreakpointInstruction, KeyCode::Char('k')) => {
+                self.renderer_state.scroll_up();
+            }
+            (WindowState::BreakpointInstruction, KeyCode::Up) => {
+                self.renderer_state.scroll_up();
+            }
+            (WindowState::BreakpointInstruction, KeyCode::Char('j')) => {
+                self.renderer_state.scroll_down();
+            }
+            (WindowState::BreakpointInstruction, KeyCode::Down) => {
+                self.renderer_state.scroll_down();
+            }
+            (WindowState::BreakpointInstruction, KeyCode::Enter) => {
+                let instruction =
+                    Instruction::from(Instruction::NAMES[self.renderer_state.chosen_instruction]);
+                self.renderer_state
+                    .breakpoints
+                    .add(Breakpoint::Instruction(instruction));
+                self.renderer_state.chosen_instruction = 0;
+                self.renderer_state.window_state = WindowState::Main;
             }
             _ => {}
         }

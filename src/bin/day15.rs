@@ -208,6 +208,7 @@ async fn io_loop(state: State, movement: Movement) -> Result<(State, Reply)> {
     let breakpoint =
         |_: &State, instruction: &Instruction| matches!(instruction, Instruction::Output(_));
     process.run_until(breakpoint).await?;
+    // run_until stops at the output instruction, we we need to step once to get the send.
     process.step().await?;
 
     // Get the output and return it with the state.

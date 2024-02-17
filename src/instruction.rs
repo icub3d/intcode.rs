@@ -30,6 +30,11 @@ pub enum Instruction {
 }
 
 impl Instruction {
+    /// The list of the names of all the instructions.
+    pub const NAMES: [&'static str; 10] = [
+        "ADD", "MUL", "INP", "OUT", "JIT", "JIF", "LST", "EQL", "ARO", "HLT",
+    ];
+
     /// Get the number of parameters for a given instruction. This will be used by the tui to
     /// highlight the parameters of an operation. Also useful for incrementing the instruction
     /// pointer.
@@ -166,6 +171,42 @@ impl Display for Instruction {
             }
             Instruction::AdjustRelativeBaseOffset(value) => write!(f, "ARO {}", value),
             Instruction::Halt => write!(f, "HLT"),
+        }
+    }
+}
+
+impl From<&str> for Instruction {
+    fn from(s: &str) -> Self {
+        match s {
+            "ADD" => Instruction::Add(
+                Parameter::Position(0),
+                Parameter::Position(0),
+                Parameter::Position(0),
+            ),
+            "MUL" => Instruction::Multiply(
+                Parameter::Position(0),
+                Parameter::Position(0),
+                Parameter::Position(0),
+            ),
+            "INP" => Instruction::Input(Parameter::Position(0)),
+            "OUT" => Instruction::Output(Parameter::Position(0)),
+            "JIT" => Instruction::JumpIfTrue(Parameter::Position(0), Parameter::Position(0)),
+            "JIF" => Instruction::JumpIfFalse(Parameter::Position(0), Parameter::Position(0)),
+            "LST" => Instruction::LessThan(
+                Parameter::Position(0),
+                Parameter::Position(0),
+                Parameter::Position(0),
+            ),
+            "EQL" => Instruction::Equals(
+                Parameter::Position(0),
+                Parameter::Position(0),
+                Parameter::Position(0),
+            ),
+            "ARO" => Instruction::AdjustRelativeBaseOffset(Parameter::Position(0)),
+            "HLT" => Instruction::Halt,
+            // TODO, at this point, we could also see if they fit the pattern in Display and parse
+            // them.
+            _ => panic!("invalid instruction"),
         }
     }
 }

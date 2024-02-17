@@ -1,14 +1,14 @@
 use std::{collections::VecDeque, str::FromStr};
 
-use crate::{app::App, instruction::Instruction, process};
+use crate::{app::App, breakpoint::Breakpoints, instruction::Instruction, process};
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{
-        block::Title, Block, BorderType, Borders, Cell, List, Paragraph, Row, Table, TableState,
-        Tabs, Wrap,
+        block::Title, Block, BorderType, Borders, Cell, Clear, List, Paragraph, Row, Table,
+        TableState, Tabs, Wrap,
     },
     Frame,
 };
@@ -55,6 +55,16 @@ impl From<Monokai> for Color {
     }
 }
 
+/// The different states of the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowState {
+    Main,
+    BreakpointType,
+    BreakpointList,
+    BreakpointInstruction,
+    BreakpointMemory,
+}
+
 /// The state of the renderer.
 pub struct RendererState {
     /// The index of the active process.
@@ -62,6 +72,18 @@ pub struct RendererState {
 
     /// The total number of processes.
     pub total_processes: usize,
+
+    /// The window state of the renderer.
+    pub window_state: WindowState,
+
+    /// The breakpoints of the app.
+    pub breakpoints: Breakpoints,
+
+    // The index of the chosen instruction for the breakpoint menu.
+    pub chosen_instruction: usize,
+
+    // The value of the chosen memory location for the breakpoint menu.
+    pub chosen_memory_location: usize,
 
     memory_rows: Vec<usize>,
     table_states: Vec<TableState>,
@@ -80,6 +102,10 @@ impl RendererState {
         Self {
             active_process: 0,
             total_processes,
+            window_state: WindowState::Main,
+            breakpoints: Breakpoints::default(),
+            chosen_instruction: 0,
+            chosen_memory_location: 0,
             memory_rows,
             table_states,
         }
@@ -87,19 +113,39 @@ impl RendererState {
 
     /// Update the scroll and table states to scroll them "up".
     pub fn scroll_up(&mut self) {
-        let table_state = &mut self.table_states[self.active_process];
-        if table_state.offset() > 0 {
-            table_state.select(Some(table_state.offset() - 1));
-            *table_state.offset_mut() -= 1;
+        match self.window_state {
+            WindowState::Main => {
+                let table_state = &mut self.table_states[self.active_process];
+                if table_state.offset() > 0 {
+                    table_state.select(Some(table_state.offset() - 1));
+                    *table_state.offset_mut() -= 1;
+                }
+            }
+            WindowState::BreakpointInstruction => {
+                if self.chosen_instruction > 0 {
+                    self.chosen_instruction -= 1;
+                }
+            }
+            _ => {}
         }
     }
 
     /// Update the scroll and table states to scroll them "down".
     pub fn scroll_down(&mut self) {
-        let table_state = &mut self.table_states[self.active_process];
-        if table_state.offset() < self.memory_rows[self.active_process] - 1 {
-            table_state.select(Some(table_state.offset() + 1));
-            *table_state.offset_mut() += 1;
+        match self.window_state {
+            WindowState::Main => {
+                let table_state = &mut self.table_states[self.active_process];
+                if table_state.offset() < self.memory_rows[self.active_process] - 1 {
+                    table_state.select(Some(table_state.offset() + 1));
+                    *table_state.offset_mut() += 1;
+                }
+            }
+            WindowState::BreakpointInstruction => {
+                if self.chosen_instruction < Instruction::NAMES.len() - 1 {
+                    self.chosen_instruction += 1;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -145,6 +191,25 @@ impl RendererState {
         Self::draw_channels(frame, sidebar[1], &buffers, self.active_process);
         Self::draw_talking_head(frame, sidebar[2]);
         Self::draw_help(frame, rows[3]);
+
+        match self.window_state {
+            WindowState::Main => {}
+            WindowState::BreakpointList => {
+                Self::draw_breakpoint_list(&self.breakpoints, frame);
+            }
+            WindowState::BreakpointType => {
+                Self::draw_breakpoint_type(frame);
+            }
+            WindowState::BreakpointInstruction => {
+                Self::draw_breakpoint_instruction(
+                    Instruction::NAMES[self.chosen_instruction],
+                    frame,
+                );
+            }
+            WindowState::BreakpointMemory => {
+                Self::draw_breakpoint_memory(&self.chosen_memory_location.to_string(), frame);
+            }
+        }
     }
 
     fn draw_header(frame: &mut Frame, chunk: Rect) {
@@ -396,11 +461,130 @@ impl RendererState {
                 .fg(Monokai::Background.into())
                 .bg(Monokai::Green.into()),
         );
-
-        let status = Paragraph::new("(q)uit | (s)tep | (0-9) select process")
-            .block(block)
-            .alignment(Alignment::Left);
+        let status =
+            Paragraph::new("(q)uit | (s)tep | (c)ontinue | (b)reakpoint | (0-9) select process")
+                .block(block)
+                .alignment(Alignment::Left);
 
         frame.render_widget(status, chunk);
+    }
+
+    fn draw_breakpoint_type(frame: &mut Frame) {
+        let area = Self::centered_rect(25, 30, frame.size());
+        frame.render_widget(Clear, area);
+
+        let block = Block::default()
+            .title(Title::from("Breakpoint Type").alignment(Alignment::Center))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_type(BorderType::Rounded)
+            .style(
+                Style::default()
+                    .fg(Monokai::White.into())
+                    .bg(Monokai::Background.into()),
+            );
+
+        let types = vec!["(I)nstruction", "(M)emory"];
+        let items: Vec<_> = types.into_iter().map(Line::raw).collect();
+        let list = List::new(items).block(block);
+        frame.render_widget(list, area);
+    }
+
+    fn draw_breakpoint_instruction(selected: &str, frame: &mut Frame) {
+        let area = Self::centered_rect(25, 60, frame.size());
+        frame.render_widget(Clear, area);
+
+        let block = Block::default()
+            .title(Title::from("Breakpoint Instruction").alignment(Alignment::Center))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_type(BorderType::Rounded)
+            .style(
+                Style::default()
+                    .fg(Monokai::White.into())
+                    .bg(Monokai::Background.into()),
+            );
+
+        let instructions: Vec<_> = Instruction::NAMES
+            .iter()
+            .map(|name| {
+                let mut style = Style::default().fg(Monokai::LightGrey.into());
+                if name == &selected {
+                    style = style.fg(Monokai::White.into());
+                }
+                Span::from(*name).style(style)
+            })
+            .collect();
+
+        let list = List::new(instructions).block(block);
+        frame.render_widget(list, area);
+    }
+
+    fn draw_breakpoint_memory(location: &str, frame: &mut Frame) {
+        let area = Self::centered_rect(25, 30, frame.size());
+        frame.render_widget(Clear, area);
+
+        let block = Block::default()
+            .title(Title::from("Breakpoint Memory Location").alignment(Alignment::Center))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_type(BorderType::Rounded)
+            .style(
+                Style::default()
+                    .fg(Monokai::White.into())
+                    .bg(Monokai::Background.into()),
+            );
+
+        let text = Paragraph::new(location)
+            .block(block)
+            .style(Style::default().bg(Monokai::DarkerGrey.into()))
+            .alignment(Alignment::Center);
+        frame.render_widget(text, area);
+    }
+
+    fn draw_breakpoint_list(breakpoints: &Breakpoints, frame: &mut Frame) {
+        let area = Self::centered_rect(60, 70, frame.size());
+        frame.render_widget(Clear, area);
+
+        let block = Block::default()
+            .title(Title::from("Breakpoints").alignment(Alignment::Center))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_type(BorderType::Rounded)
+            .style(
+                Style::default()
+                    .fg(Monokai::White.into())
+                    .bg(Monokai::Background.into()),
+            );
+
+        let items: Vec<_> = breakpoints
+            .clone()
+            .into_iter()
+            .map(|bp| Line::raw(format!("{:?}", bp)))
+            .collect();
+        let list = List::new(items).block(block);
+        frame.render_widget(list, area);
+    }
+
+    fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+        // Cut the given rectangle into three vertical pieces
+        let popup_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ])
+            .split(r);
+
+        // Then cut the middle vertical piece into three width-wise pieces
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ])
+            .split(popup_layout[1])[1] // Return the middle chunk
     }
 }
