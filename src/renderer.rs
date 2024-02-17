@@ -462,7 +462,7 @@ impl RendererState {
                 .bg(Monokai::Green.into()),
         );
         let status =
-            Paragraph::new("(q)uit | (s)tep | (c)ontinue | (b)reakpoint | (0-9) select process")
+            Paragraph::new("(q)uit | (s)tep | (c)ontinue | (b)reakpoint | list (B)reakpoints | (0-9) select process")
                 .block(block)
                 .alignment(Alignment::Left);
 

@@ -148,6 +148,8 @@ fn main() {
         .expect("no oxygen system found");
     println!("p1: {}", p1);
 
+    // For part 2, we can simply do a BFS from the oxygen position and track the distance of the
+    // last node that would be visited.
     let mut frontier = VecDeque::new();
     frontier.push_back((0, oxygen.unwrap()));
     let mut seen = HashSet::new();
