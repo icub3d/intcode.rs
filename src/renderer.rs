@@ -15,7 +15,7 @@ use ratatui::{
 
 /// The colors palette for the monokai theme.
 #[allow(dead_code)]
-pub enum Monokai {
+pub enum ColorScheme {
     DarkBlack,
     LightBlack,
     Background,
@@ -33,24 +33,46 @@ pub enum Monokai {
     Yellow,
 }
 
-impl From<Monokai> for Color {
-    fn from(color: Monokai) -> Self {
+impl From<ColorScheme> for Color {
+    fn from(color: ColorScheme) -> Self {
         match color {
-            Monokai::DarkBlack => Color::from_str("#19181a").unwrap(),
-            Monokai::LightBlack => Color::from_str("#221f22").unwrap(),
-            Monokai::Background => Color::from_str("#2d2a2e").unwrap(),
-            Monokai::DarkerGrey => Color::from_str("#403e41").unwrap(),
-            Monokai::DarkGrey => Color::from_str("#5b595c").unwrap(),
-            Monokai::Grey => Color::from_str("#727072").unwrap(),
-            Monokai::LightGrey => Color::from_str("#939293").unwrap(),
-            Monokai::LighterGrey => Color::from_str("#c1c0c0").unwrap(),
-            Monokai::White => Color::from_str("#fcfcfa").unwrap(),
-            Monokai::Blue => Color::from_str("#78dce8").unwrap(),
-            Monokai::Green => Color::from_str("#a9dc76").unwrap(),
-            Monokai::Violet => Color::from_str("#ab9df2").unwrap(),
-            Monokai::Orange => Color::from_str("#fc9867").unwrap(),
-            Monokai::Red => Color::from_str("#ff6188").unwrap(),
-            Monokai::Yellow => Color::from_str("#ffd866").unwrap(),
+            ColorScheme::DarkBlack => Color::from_str("#11111b").unwrap(),
+            ColorScheme::LightBlack => Color::from_str("#181825").unwrap(),
+            ColorScheme::Background => Color::from_str("#1e1e2e").unwrap(),
+            ColorScheme::DarkerGrey => Color::from_str("#313244").unwrap(),
+            ColorScheme::DarkGrey => Color::from_str("#45475a").unwrap(),
+            ColorScheme::Grey => Color::from_str("#585b70").unwrap(),
+            ColorScheme::LightGrey => Color::from_str("#6c7086").unwrap(),
+            ColorScheme::LighterGrey => Color::from_str("#9399b2").unwrap(),
+            ColorScheme::White => Color::from_str("#f5e0dc").unwrap(),
+            ColorScheme::Blue => Color::from_str("#89b4fa").unwrap(),
+            ColorScheme::Green => Color::from_str("#a6e3a1").unwrap(),
+            ColorScheme::Violet => Color::from_str("#b4befe").unwrap(),
+            ColorScheme::Orange => Color::from_str("#fab387").unwrap(),
+            ColorScheme::Red => Color::from_str("#f38ba8").unwrap(),
+            ColorScheme::Yellow => Color::from_str("#f9e2af").unwrap(),
+        }
+    }
+}
+
+impl From<ColorScheme> for bevy::prelude::Color {
+    fn from(color: ColorScheme) -> Self {
+        match color {
+            ColorScheme::DarkBlack => bevy::prelude::Color::hex("19181a").unwrap(),
+            ColorScheme::LightBlack => bevy::prelude::Color::hex("221f22").unwrap(),
+            ColorScheme::Background => bevy::prelude::Color::hex("2d2a2e").unwrap(),
+            ColorScheme::DarkerGrey => bevy::prelude::Color::hex("403e41").unwrap(),
+            ColorScheme::DarkGrey => bevy::prelude::Color::hex("5b595c").unwrap(),
+            ColorScheme::Grey => bevy::prelude::Color::hex("727072").unwrap(),
+            ColorScheme::LightGrey => bevy::prelude::Color::hex("939293").unwrap(),
+            ColorScheme::LighterGrey => bevy::prelude::Color::hex("c1c0c0").unwrap(),
+            ColorScheme::White => bevy::prelude::Color::hex("fcfcfa").unwrap(),
+            ColorScheme::Blue => bevy::prelude::Color::hex("78dce8").unwrap(),
+            ColorScheme::Green => bevy::prelude::Color::hex("a9dc76").unwrap(),
+            ColorScheme::Violet => bevy::prelude::Color::hex("ab9df2").unwrap(),
+            ColorScheme::Orange => bevy::prelude::Color::hex("fc9867").unwrap(),
+            ColorScheme::Red => bevy::prelude::Color::hex("ff6188").unwrap(),
+            ColorScheme::Yellow => bevy::prelude::Color::hex("ffd866").unwrap(),
         }
     }
 }
@@ -215,8 +237,8 @@ impl RendererState {
     fn draw_header(frame: &mut Frame, chunk: Rect) {
         let title_block = Block::default().style(
             Style::default()
-                .fg(Monokai::Background.into())
-                .bg(Monokai::Violet.into()),
+                .fg(ColorScheme::Background.into())
+                .bg(ColorScheme::Violet.into()),
         );
 
         let title = Paragraph::new("INTCODE COMPUTER")
@@ -235,23 +257,23 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Processes").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Yellow.into()))
+            .border_style(Style::default().fg(ColorScheme::Yellow.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let tabs = process_states
             .iter()
             .enumerate()
             .map(|(i, state)| {
-                let mut style = Style::default().bg(Monokai::Grey.into());
+                let mut style = Style::default().bg(ColorScheme::Grey.into());
                 if state.halted {
-                    style = style.fg(Monokai::Red.into());
+                    style = style.fg(ColorScheme::Red.into());
                 } else if i == active_process {
-                    style = style.fg(Monokai::White.into());
+                    style = style.fg(ColorScheme::White.into());
                 }
                 Span::from(format!("<   {}   >", i)).style(style)
             })
@@ -259,8 +281,8 @@ impl RendererState {
         let tabs = Tabs::new(tabs)
             .select(active_process)
             .block(block)
-            .style(Style::default().fg(Monokai::DarkerGrey.into()))
-            .highlight_style(Style::default().bg(Monokai::Green.into()));
+            .style(Style::default().fg(ColorScheme::DarkerGrey.into()))
+            .highlight_style(Style::default().bg(ColorScheme::Green.into()));
 
         frame.render_widget(tabs, chunk);
     }
@@ -274,12 +296,12 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Memory").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Orange.into()))
+            .border_style(Style::default().fg(ColorScheme::Orange.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let (instruction, positions, relatives) = match process_state.next_instruction() {
@@ -295,17 +317,17 @@ impl RendererState {
         let mut params_left = 0;
         let mut draw_chunk = |start: usize, chunk: &[isize]| {
             let mut row = vec![Cell::from(format!("{:08}", start))
-                .style(Style::default().bg(Monokai::DarkerGrey.into()))];
+                .style(Style::default().bg(ColorScheme::DarkerGrey.into()))];
             for (j, v) in chunk.iter().enumerate() {
-                let mut style = Style::default().bg(Monokai::Background.into());
+                let mut style = Style::default().bg(ColorScheme::Background.into());
                 if process_state.instruction_pointer == start + j {
-                    style = style.bg(Monokai::Green.into());
+                    style = style.bg(ColorScheme::Green.into());
                     params_left = instruction.parameter_count();
                 } else if params_left > 0 {
-                    style = style.bg(Monokai::Red.into());
+                    style = style.bg(ColorScheme::Red.into());
                     params_left -= 1;
                 } else if positions.contains(&(start + j)) || relatives.contains(&(start + j)) {
-                    style = style.bg(Monokai::Blue.into());
+                    style = style.bg(ColorScheme::Blue.into());
                 }
                 row.push(Cell::from(format!("{}", v)).style(style));
             }
@@ -364,7 +386,7 @@ impl RendererState {
                     Cell::from("+6"),
                     Cell::from("+7"),
                 ])
-                .style(Style::default().bg(Monokai::DarkerGrey.into())),
+                .style(Style::default().bg(ColorScheme::DarkerGrey.into())),
             )
             .column_spacing(0);
 
@@ -375,12 +397,12 @@ impl RendererState {
         let state_block = Block::default()
             .title(Title::from("State").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Red.into()))
+            .border_style(Style::default().fg(ColorScheme::Red.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let instruction = match process_state.next_instruction() {
@@ -416,21 +438,21 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Channels").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_style(Style::default().fg(ColorScheme::Violet.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let channels: Vec<_> = channels
             .iter()
             .enumerate()
             .map(|(i, channel)| {
-                let mut style = Style::default().fg(Monokai::LightGrey.into());
+                let mut style = Style::default().fg(ColorScheme::LightGrey.into());
                 if i == active_process {
-                    style = style.fg(Monokai::White.into());
+                    style = style.fg(ColorScheme::White.into());
                 }
                 Span::from(format!("{i}: {:?}", channel)).style(style)
             })
@@ -444,12 +466,12 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Talking Head").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Blue.into()))
+            .border_style(Style::default().fg(ColorScheme::Blue.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         frame.render_widget(block, chunk);
@@ -458,8 +480,8 @@ impl RendererState {
     fn draw_help(frame: &mut Frame, chunk: Rect) {
         let block = Block::default().style(
             Style::default()
-                .fg(Monokai::Background.into())
-                .bg(Monokai::Green.into()),
+                .fg(ColorScheme::Background.into())
+                .bg(ColorScheme::Green.into()),
         );
         let status =
             Paragraph::new("(q)uit | (s)tep | (c)ontinue | (b)reakpoint | list (B)reakpoints | (0-9) select process")
@@ -476,12 +498,12 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Breakpoint Type").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_style(Style::default().fg(ColorScheme::Violet.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let types = vec!["(I)nstruction", "(M)emory"];
@@ -497,20 +519,20 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Breakpoint Instruction").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_style(Style::default().fg(ColorScheme::Violet.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let instructions: Vec<_> = Instruction::NAMES
             .iter()
             .map(|name| {
-                let mut style = Style::default().fg(Monokai::LightGrey.into());
+                let mut style = Style::default().fg(ColorScheme::LightGrey.into());
                 if name == &selected {
-                    style = style.fg(Monokai::White.into());
+                    style = style.fg(ColorScheme::White.into());
                 }
                 Span::from(*name).style(style)
             })
@@ -527,17 +549,17 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Breakpoint Memory Location").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_style(Style::default().fg(ColorScheme::Violet.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let text = Paragraph::new(location)
             .block(block)
-            .style(Style::default().bg(Monokai::DarkerGrey.into()))
+            .style(Style::default().bg(ColorScheme::DarkerGrey.into()))
             .alignment(Alignment::Center);
         frame.render_widget(text, area);
     }
@@ -549,12 +571,12 @@ impl RendererState {
         let block = Block::default()
             .title(Title::from("Breakpoints").alignment(Alignment::Center))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Monokai::Violet.into()))
+            .border_style(Style::default().fg(ColorScheme::Violet.into()))
             .border_type(BorderType::Rounded)
             .style(
                 Style::default()
-                    .fg(Monokai::White.into())
-                    .bg(Monokai::Background.into()),
+                    .fg(ColorScheme::White.into())
+                    .bg(ColorScheme::Background.into()),
             );
 
         let items: Vec<_> = breakpoints

@@ -6,7 +6,7 @@ use std::{
 use intcode::{
     ipc::{Channel, ChannelReceiver, ChannelSender},
     process::Process,
-    renderer::Monokai,
+    renderer::ColorScheme,
 };
 
 use anyhow::Result;
@@ -435,8 +435,8 @@ fn ui(app: &AppState, f: &mut Frame) {
     // Draw the title block.
     let title_block = Block::default().style(
         Style::default()
-            .fg(Monokai::Background.into())
-            .bg(Monokai::Violet.into()),
+            .fg(ColorScheme::Background.into())
+            .bg(ColorScheme::Violet.into()),
     );
     let title = Paragraph::new("ARCADE CABINET")
         .block(title_block)
@@ -446,8 +446,8 @@ fn ui(app: &AppState, f: &mut Frame) {
     // Draw the status block.
     let status_block = Block::default().style(
         Style::default()
-            .fg(Monokai::Background.into())
-            .bg(Monokai::Green.into()),
+            .fg(ColorScheme::Background.into())
+            .bg(ColorScheme::Green.into()),
     );
     let status = Paragraph::new(format!(
         "Score: {} | (a) left | (d) right | (s) no move",
@@ -473,12 +473,12 @@ fn ui(app: &AppState, f: &mut Frame) {
     let block = Block::default()
         .title(Title::from("BLOCK BREAKER").alignment(Alignment::Center))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Monokai::Orange.into()))
+        .border_style(Style::default().fg(ColorScheme::Orange.into()))
         .border_type(BorderType::Rounded)
         .style(
             Style::default()
-                .fg(Monokai::White.into())
-                .bg(Monokai::Background.into()),
+                .fg(ColorScheme::White.into())
+                .bg(ColorScheme::Background.into()),
         );
     let mut rows = vec![];
     for row in app.grid.iter() {
