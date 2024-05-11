@@ -12,7 +12,7 @@ use intcode::renderer::ColorScheme;
 
 use anyhow::Result;
 use clap::Parser;
-use crossterm::event::{Event, EventStream};
+use crossterm::event::{Event, EventStream, KeyEvent};
 use crossterm::{
     event::KeyCode,
     execute,
@@ -167,10 +167,13 @@ async fn write_or_wait(mut input: ChannelSender, value: Option<isize>) {
 enum OutputState {
     /// We are initializing the grid.
     InitGrid,
+
     /// We are in the question loop getting questions and sending answers.
     QuestionLoop,
+
     /// We are redrawing the grid on the right hand side.
     RedrawGrid,
+
     /// We are done.
     Done,
 }
@@ -187,119 +190,37 @@ async fn tui() -> Result<()> {
     let mut app = AppState::new();
     let mut reader = EventStream::new();
     let mut inputs = VecDeque::new();
-    let mut output_state = OutputState::InitGrid;
-    let mut last_output = 0;
-    let mut x = 0;
-    let mut y = 0;
 
-    // Our main loop. It's a bit long, but covers all the various events of the app.
+    // Our main loop. We'll run this until we get a quit signal from the event handler.
     loop {
         // We use biased here to make sure outputs are prioritized over other events.
         select! {
             biased;
-            val = output_rx.recv(), if output_state != OutputState::Done => {
-                // We've received some output. We want to handle it based on the state.
-                if let Some(output) = val {
-                    match (output, last_output, output_state) {
-                        // The program is done, print out the dust to the terminal.
-                        (i, _, _) if i > 255 => {
-                            app.terminal.push("dust: ".to_string().chars().collect());
-                            app.terminal.last_mut().unwrap().extend(output.to_string().chars());
-                            output_state = OutputState::Done;
-                        },
 
-                        // If we got two newlines while initializing the grid, we move to the question loop.
-                        (10, 10, OutputState::InitGrid) => {
-                            output_state = OutputState::QuestionLoop;
-                        },
-
-                        // If we get two newlines in the question loop, we move to redrawing the
-                        // grid. Reset our x and y back to the top.
-                        (10, 10, OutputState::QuestionLoop) => {
-                            app.terminal.push(vec![]);
-                            output_state = OutputState::RedrawGrid;
-                            x = 0;
-                            y = 0;
-                        },
-
-                        // If we get two newlines and we are redrawing the grid, reset x and y to
-                        // go back to the top.
-                        (10, 10, OutputState::RedrawGrid) => {
-                            x = 0;
-                            y = 0;
-                        },
-
-                        // If we get a newline while redrawing the grid, move to the next row.
-                        (10, _, OutputState::RedrawGrid | OutputState::InitGrid) => {
-                            y += 1;
-                            x = 0;
-                        },
-
-                        // All other grid drawing states just put the output into the grid.
-                        (_, _, OutputState::RedrawGrid | OutputState::InitGrid) => {
-                            app.grid[y][x] = output as u8 as char;
-                            x += 1;
-                        },
-
-                        // For everything else, just put the output into the terminal.
-                        (_, _, _) => {
-                            app.terminal.last_mut().unwrap().push(output as u8 as char);
-                        },
-                    }
-                    last_output = output;
-                } else {
-                    // When the output if closed, we'll hit this section and move to done so we
-                    // don't alter the state anymore.
-                    output_state = OutputState::Done;
-                }
+            // If we get output from the program, we should update our app state.
+            val = output_rx.recv(), if app.output_state != OutputState::Done => {
+                // Handle any output.
+                app.handle_output(val);
             },
+
+            // If we get and even from our event reader, we should update our inputs.
+            //
+            // From a readability perspective, there is always a question of how much to put in
+            // a main even loop. Most of the cases simply call a function. This one does some high
+            // level handling. We could also potentially put all of the code in this loop.
             evt = reader.next().fuse() => {
-                // If we get an event from the TUI (technically crossterm), we'll handle it here.
                 if let Some(Ok(Event::Key(key))) = evt {
-                    match (key.code, output_state) {
-                        // If we get a ctrl+q, we'll break out of the loop and exit the program.
-                        (KeyCode::Char('q'), _) if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
-                            break;
-                        },
-
-                        // If we are done, ignore all other events.
-                        (_, OutputState::Done) => {
-                            continue;
-                        },
-
-                        // Handle the backspace in the question loop.
-                        (KeyCode::Backspace, OutputState::QuestionLoop) => {
-                            if app.line.pop().is_some() {
-                                app.terminal.last_mut().unwrap().pop();
-                            }
-                        },
-
-                        // Handle the enter key in the question loop. We'll take the line and send
-                        // it to the program.
-                        (KeyCode::Enter, OutputState::QuestionLoop) => {
-                            app.line.iter().for_each(|c| {
-                                inputs.push_back(*c as isize);
-                            });
-                            inputs.push_back(10);
-                            app.terminal.push(vec![]);
-                            app.line.clear();
-                        },
-
-                        // Handle all other characters in the question loop by adding them to the
-                        // line and the terminal.
-                        (KeyCode::Char(c), OutputState::QuestionLoop)=> {
-                            app.line.push(c);
-                            app.terminal.last_mut().unwrap().push(c);
-                        },
-                        _ => {},
+                    if app.handle_input(key, &mut inputs) {
+                        break;
                     }
                 }
             },
+
             // If we have something to write, write it out.
             _ = write_or_wait(input_tx.clone(), inputs.pop_front()) => {},
-            // Otherwise sleep for a short duration for something to happen.
-            _ = tokio::time::sleep(std::time::Duration::from_millis(16)) => {
-            },
+
+            // If we don't get anything, redraw and start the select again.
+            _ = tokio::time::sleep(std::time::Duration::from_millis(16)) => {},
         }
 
         // After we've handled an event, do a redraw of the TUI.
@@ -313,9 +234,24 @@ async fn tui() -> Result<()> {
 
 /// The state of the terminal. The TUI will use this to draw the app.
 struct AppState {
+    /// The grid of the game.
     grid: Vec<Vec<char>>,
+
+    /// The terminal output.
     terminal: Vec<Vec<char>>,
+
+    /// The current line we are typing.
     line: Vec<char>,
+
+    /// The state of the output loop.
+    output_state: OutputState,
+
+    /// The last output we received.
+    last_output: isize,
+
+    /// The current x and y position in the grid.
+    x: usize,
+    y: usize,
 }
 
 impl AppState {
@@ -324,6 +260,111 @@ impl AppState {
             grid: vec![vec!['.'; 51]; 31],
             line: vec![],
             terminal: vec![vec![]],
+            output_state: OutputState::InitGrid,
+            last_output: 0,
+            x: 0,
+            y: 0,
+        }
+    }
+
+    fn handle_input(&mut self, key: KeyEvent, inputs: &mut VecDeque<isize>) -> bool {
+        match (key.code, self.output_state) {
+            // If we get a ctrl+q, we'll break out of the loop and exit the program.
+            (KeyCode::Char('q'), _) if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
+                false
+            }
+
+            // If we are done, ignore all other events.
+            (_, OutputState::Done) => true,
+
+            // Handle the backspace in the question loop.
+            (KeyCode::Backspace, OutputState::QuestionLoop) => {
+                if self.line.pop().is_some() {
+                    self.terminal.last_mut().unwrap().pop();
+                }
+                false
+            }
+
+            // Handle the enter key in the question loop. We'll take the line and send
+            // it to the program.
+            (KeyCode::Enter, OutputState::QuestionLoop) => {
+                self.line.iter().for_each(|c| {
+                    inputs.push_back(*c as isize);
+                });
+                inputs.push_back(10);
+                self.terminal.push(vec![]);
+                self.line.clear();
+                false
+            }
+
+            // Handle all other characters in the question loop by adding them to the
+            // line and the terminal.
+            (KeyCode::Char(c), OutputState::QuestionLoop) => {
+                self.line.push(c);
+                self.terminal.last_mut().unwrap().push(c);
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn handle_output(&mut self, output: Option<isize>) {
+        // We've received some output. We want to handle it based on the state.
+        if let Some(output) = output {
+            match (output, self.last_output, self.output_state) {
+                // The program is done, print out the dust to the terminal.
+                (i, _, _) if i > 255 => {
+                    self.terminal.push("dust: ".to_string().chars().collect());
+                    self.terminal
+                        .last_mut()
+                        .unwrap()
+                        .extend(output.to_string().chars());
+                    self.output_state = OutputState::Done;
+                }
+
+                // If we got two newlines while initializing the grid, we move to the question loop.
+                (10, 10, OutputState::InitGrid) => {
+                    self.output_state = OutputState::QuestionLoop;
+                }
+
+                // If we get two newlines in the question loop, we move to redrawing the
+                // grid. Reset our x and y back to the top.
+                (10, 10, OutputState::QuestionLoop) => {
+                    self.terminal.push(vec![]);
+                    self.output_state = OutputState::RedrawGrid;
+                    self.x = 0;
+                    self.y = 0;
+                }
+
+                // If we get two newlines and we are redrawing the grid, reset x and y to
+                // go back to the top.
+                (10, 10, OutputState::RedrawGrid) => {
+                    self.x = 0;
+                    self.y = 0;
+                }
+
+                // If we get a newline while redrawing the grid, move to the next row.
+                (10, _, OutputState::RedrawGrid | OutputState::InitGrid) => {
+                    self.y += 1;
+                    self.x = 0;
+                }
+
+                // All other grid drawing states just put the output into the grid.
+                (_, _, OutputState::RedrawGrid | OutputState::InitGrid) => {
+                    self.grid[self.y][self.x] = output as u8 as char;
+                    self.x += 1;
+                }
+
+                // For everything else, just put the output into the terminal.
+                (_, _, _) => {
+                    self.terminal.last_mut().unwrap().push(output as u8 as char);
+                }
+            }
+            self.last_output = output;
+        } else {
+            // When the output if closed, we'll hit this section and move to done so we
+            // don't alter the state anymore.
+            self.output_state = OutputState::Done;
         }
     }
 }
