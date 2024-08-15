@@ -17,6 +17,7 @@ enum Day {
     Day5,
     Day7,
     Day9,
+    Day19,
 }
 
 // Create a flag so we can run the tui.
@@ -35,6 +36,7 @@ async fn main() -> Result<()> {
         Day::Day5 => day5().await?,
         Day::Day7 => day7().await?,
         Day::Day9 => day9().await?,
+        Day::Day19 => day19().await?,
     };
 
     tui::run(app).await
@@ -157,6 +159,27 @@ async fn day9() -> Result<App> {
 
     let (i, mut tx, rx) = Channel::new(true);
     let (o, tx2, _) = Channel::new(true);
+    tx.send(2).await.unwrap();
+    let channels = vec![i, o];
+
+    let process = Process::new(input, rx, tx2);
+    let state = Arc::new(Mutex::new(process.state()));
+    let states = vec![state.clone()];
+
+    let (notifier, notifier_receiver) = mpsc::channel::<Notification>(32);
+    let notifiers = vec![notifier];
+
+    main_process(notifier_receiver, process, state).await;
+
+    Ok(App::new(channels, states, notifiers))
+}
+
+async fn day19() -> Result<App> {
+    let input = include_str!("../../inputs/day19");
+
+    let (i, mut tx, rx) = Channel::new(true);
+    let (o, tx2, _) = Channel::new(true);
+    tx.send(2).await.unwrap();
     tx.send(2).await.unwrap();
     let channels = vec![i, o];
 

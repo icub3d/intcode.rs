@@ -125,7 +125,7 @@ impl State {
             8 => param!(Instruction::Equals, 3),
             9 => param!(Instruction::AdjustRelativeBaseOffset, 1),
             99 => Instruction::Halt,
-            _ => panic!("invalid opcode"),
+            _ => return None,
         };
 
         Some((instruction, instruction.parameter_count() + 1))
