@@ -71,7 +71,7 @@ async fn main_process(
 }
 
 async fn day2() -> Result<App> {
-    let input = include_str!("../../inputs/day02");
+    let input = include_str!("inputs/day02");
 
     let channels = vec![];
     let mut states = Vec::new();
@@ -95,7 +95,7 @@ async fn day2() -> Result<App> {
 }
 
 async fn day5() -> Result<App> {
-    let input = include_str!("../../inputs/day05");
+    let input = include_str!("inputs/day05");
 
     let mut states = Vec::new();
     let mut notifiers = Vec::new();
@@ -119,7 +119,7 @@ async fn day5() -> Result<App> {
 }
 
 async fn day7() -> Result<App> {
-    let input = include_str!("../../inputs/day07");
+    let input = include_str!("inputs/day07");
     let permutation = [0, 1, 2, 3, 4];
     let (channel, mut sender, mut receiver) = Channel::new(false);
     let first = sender.clone();
@@ -155,7 +155,7 @@ async fn day7() -> Result<App> {
 }
 
 async fn day9() -> Result<App> {
-    let input = include_str!("../../inputs/day09");
+    let input = include_str!("inputs/day09");
 
     let (i, mut tx, rx) = Channel::new(true);
     let (o, tx2, _) = Channel::new(true);
@@ -175,7 +175,7 @@ async fn day9() -> Result<App> {
 }
 
 async fn day19() -> Result<App> {
-    let input = include_str!("../../inputs/day19");
+    let input = include_str!("inputs/day19");
 
     let (i, mut tx, rx) = Channel::new(true);
     let (o, tx2, _) = Channel::new(true);

@@ -3,7 +3,7 @@ use intcode::{ipc::Channel, process::Process};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let input = include_str!("../../inputs/day02");
+    let input = include_str!("inputs/day02");
 
     // For part 1, we can simply run the program with the two given inputs.
     let (_, sender, receiver) = Channel::new(true);

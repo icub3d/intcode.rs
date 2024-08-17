@@ -26,7 +26,7 @@ use ratatui::{
 
 use crate::output_event_emitter::OutputEvent;
 
-const INPUT: &str = include_str!("../../inputs/day13");
+const INPUT: &str = include_str!("inputs/day13");
 
 #[derive(Debug, Parser)]
 struct Cli {

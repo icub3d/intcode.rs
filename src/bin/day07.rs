@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{self, Sender};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let input = include_str!("../../inputs/day07");
+    let input = include_str!("inputs/day07");
 
     part1(input).await?;
     part2(input).await

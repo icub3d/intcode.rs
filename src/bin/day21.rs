@@ -1,4 +1,4 @@
-const INPUT: &str = include_str!("../../inputs/day21");
+const INPUT: &str = include_str!("inputs/day21");
 
 use intcode::ipc::Channel;
 use intcode::process::Process;

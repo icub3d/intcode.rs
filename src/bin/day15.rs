@@ -14,7 +14,7 @@ use anyhow::{anyhow, Result};
 use pathfinding::directed::dijkstra::dijkstra_all;
 
 // The input for the Intcode program.
-const INPUT: &str = include_str!("../../inputs/day15");
+const INPUT: &str = include_str!("inputs/day15");
 
 // The possible movements the robot can make.
 #[derive(Debug, Clone, Copy, Sequence)]

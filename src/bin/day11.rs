@@ -80,7 +80,7 @@ impl From<&Direction> for Point {
 // This is used for both parts 1 and two. We send the robot along it's way and collect the output
 // of it's work.
 async fn run_robot(start: isize) -> HashMap<Point, isize> {
-    let input = include_str!("../../inputs/day11");
+    let input = include_str!("inputs/day11");
 
     let (_, mut tx, rx) = Channel::new(true);
     let (_, tx2, mut output) = Channel::new(true);

@@ -3,7 +3,7 @@ use intcode::process::Process;
 
 #[tokio::main]
 async fn main() {
-    let input = include_str!("../../inputs/day09");
+    let input = include_str!("inputs/day09");
 
     // Once we have the updates to the Intcode computer, we can use the new
     // code to run the input program. For part 1, we send a 1. For part 2, we

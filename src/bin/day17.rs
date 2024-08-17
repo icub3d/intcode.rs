@@ -28,7 +28,7 @@ use ratatui::{Frame, Terminal};
 use serde::Serialize;
 use tokio::select;
 
-const INPUT: &str = include_str!("../../inputs/day17");
+const INPUT: &str = include_str!("inputs/day17");
 
 /// Point in 2D space
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

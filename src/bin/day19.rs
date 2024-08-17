@@ -1,4 +1,4 @@
-const INPUT: &str = include_str!("../../inputs/day19");
+const INPUT: &str = include_str!("inputs/day19");
 
 use std::collections::HashSet;
 

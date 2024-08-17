@@ -3,7 +3,7 @@ use intcode::{ipc::Channel, process::Process};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let input = include_str!("../../inputs/day05");
+    let input = include_str!("inputs/day05");
 
     // Part 1 - Once we've added the given features to our Intcode computer, we can simply run it.
     // We'll want to make sure we get all zeros except for the last value. Then the last value is
